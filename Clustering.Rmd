@@ -1,0 +1,452 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+
+
+```{r setup, include=FALSE} 
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(cluster)
+library(plotly)
+library(caret)
+library(ggbiplot)
+library(ggdendro)
+library(fastDummies)
+library(arsenal)
+library(data.table)
+library(dplyr)
+library(factoextra)
+```
+
+
+```{r}
+set.seed(123)
+```
+
+
+# USArrests Dataset and Hierarchical Clustering
+
+Consider the “USArrests” data. It is a built-in dataset you may directly get 
+in RStudio. Perform hierarchical clustering on the observations (states) and 
+answer the following questions.
+
+```{r}
+head(USArrests)
+df = USArrests
+```
+
+Using hierarchical clustering with complete linkage and Euclidean distance, 
+cluster the states.
+
+```{r}
+df_elu.dist = dist(df,method = "euclidean")
+df_elu.comp = hclust(df_elu.dist, method = "complete")
+plot(df_elu.comp,cex = .3)
+```
+
+
+Cut the dendrogram at a height that results in three distinct clusters. 
+Interpret the clusters
+
+
+```{r}
+cut_dend = cutree(df_elu.comp,k = 3)
+table(cut_dend)
+plot(cut_dend)
+```
+
+```{r}
+plot(df_elu.comp,cex = .3)
+rect.hclust(df_elu.comp, k = 3)
+new_df <- data.frame(states =  rownames(USArrests),clusters = cut_dend)
+new_df
+```
+
+```{r}
+#NAMES OF ALL STATES SEPERATED BY EACH CLUSTERS.
+group1 <- rownames(new_df[cut_dend == 1, ])
+group2 <- rownames(new_df[cut_dend == 2, ])
+group3 <- rownames(new_df[cut_dend == 3, ])
+
+print(paste("Cluster 1:", paste(group1, collapse = ", ")))
+print(paste("Cluster 2:", paste(group2, collapse = ", ")))
+print(paste("Cluster 3:", paste(group3, collapse = ", ")))
+```
+```{r}
+group_mean <- aggregate(df, by=list(cut_dend), FUN=mean)
+colnames(group_mean) <- c("Cluster", "Assault", "UrbanPop", "Murder", "Rape")
+group_mean
+```
+Interpretation:
+The above average gives us an understanding of 
+Cluster 1 contains states with high crime rates and high urban populations,
+Cluster 2 includes states with moderate crime rates and urban populations, and
+Cluster 3 includes states with low crime rates and low urban populations.
+
+Also, we can see the clusters are almost equally disturbed the data of 16,14 and 20 
+
+
+```{r}
+df_scale_elu.dist = dist(scale(df),method = "euclidean")
+df_scale_elu.comp = hclust(df_scale_elu.dist, method = "complete")
+plot(df_scale_elu.comp,cex = .3)
+```
+```{r}
+cut_dend1= cutree(df_scale_elu.comp,k = 3)
+table(cut_dend1)
+plot(cut_dend1)
+```
+```{r}
+new_df1 <- data.frame(states =  rownames(USArrests),clusters = cut_dend1)
+plot(df_scale_elu.comp,cex = .3)
+rect.hclust(df_scale_elu.comp, k = 3)
+new_df1
+```
+```{r}
+#NAMES OF ALL STATES SEPERATED BY EACH CLUSTERS.
+group1 <- rownames(new_df1[cut_dend1 == 1, ])
+group2 <- rownames(new_df1[cut_dend1 == 2, ])
+group3 <- rownames(new_df1[cut_dend1 == 3, ])
+
+print(paste("Cluster 1:", paste(group1, collapse = ", ")))
+print(paste("Cluster 2:", paste(group2, collapse = ", ")))
+print(paste("Cluster 3:", paste(group3, collapse = ", ")))
+```
+Murder numeric Murder arrests (per 100,000)
+Assault numeric Assault arrests (per 100,000)
+UrbanPop numeric Percent urban population
+Rape numeric Rape arrests (per 100,000)
+
+The above tells us the feature unit, where murder,Rape,Assault are per 100,000 where as UrbanPop numeric Percent.As a result, it is critical to scale so that the 'UrbanPop' equally contribute to the hierarchical clustering process with other variables.  
+
+Scaling the variables has an effect on the produced clusters like branch lengths and tree height.The un-scaled tree stands 300 feet tall, whereas the scaled tree stands six feet tall.  We cut the tree without scaling at a height around 140, whereas we cut the scaled tree at a height around 4 to generate 3 clusters.
+
+The clusters before clustering as a consequence where clusters were almost similar, with each cluster including all states. This result reveals that variable scales, rather than underlying data connections, dominating the clustering process.
+Therefore, scaling is important for clustering where it represents the real relationships in the data and produces more interpretable clusters
+
+# Market Segmentation
+
+An advertisement division of large club store needs to perform customer analysis 
+the store customers in order to create a segmentation for more targeted marketing campaign 
+
+You task is to identify similar customers and characterize them (at least some of them). 
+In other word perform clustering and identify customers segmentation.
+
+This data-set is derived from https://www.kaggle.com/imakash3011/customer-personality-analysis
+
+```
+Colomns description:
+People
+  ID: Customer's unique identifier
+  Year_Birth: Customer's birth year
+  Education: Customer's education level
+  Marital_Status: Customer's marital status
+  Income: Customer's yearly household income
+  Kidhome: Number of children in customer's household
+  Teenhome: Number of teenagers in customer's household
+  Dt_Customer: Date of customer's enrollment with the company
+  Recency: Number of days since customer's last purchase
+  Complain: 1 if the customer complained in the last 2 years, 0 otherwise
+
+Products
+
+  MntWines: Amount spent on wine in last 2 years
+  MntFruits: Amount spent on fruits in last 2 years
+  MntMeatProducts: Amount spent on meat in last 2 years
+  MntFishProducts: Amount spent on fish in last 2 years
+  MntSweetProducts: Amount spent on sweets in last 2 years
+  MntGoldProds: Amount spent on gold in last 2 years
+
+Place
+  NumWebPurchases: Number of purchases made through the company’s website
+  NumStorePurchases: Number of purchases made directly in stores
+```
+
+Assume that data was current on 2014-07-01
+
+
+```{r}
+#library(data.table)
+df <- data.table::fread("m_marketing_campaign.csv")
+head(df)
+```
+
+
+```{r}
+
+Today.date = as.Date("2014-07-01")
+df$Age = 2014 - df$Year_Birth
+```
+
+
+```{r}
+
+df$Dt_Customer = as.Date(df$Dt_Customer, format = "%d-%m-%Y")
+df$MembershipDays = difftime(Today.date,df$Dt_Customer)
+```
+
+```{r}
+Summarize_edu = table(df$Education)
+print(Summarize_edu)
+```
+
+
+```{r}
+
+df$EducationLevel = recode(df$Education, HighSchool=13, Associate=15, Bachelor=17, Master=19,PhD=22)
+
+```
+
+```{r}
+
+Summarize_marital.status = table(df$Marital_Status)
+print(Summarize_marital.status)
+```
+
+
+```{r}
+
+df = fastDummies::dummy_cols(df, select_columns ="Marital_Status")
+```
+
+```{r}
+
+df_sel <- subset(df, select = -c(ID, Year_Birth, Dt_Customer, Education, Marital_Status))
+```
+
+
+```{r}
+df_sel$MembershipDays = as.numeric(df_sel$MembershipDays)
+df_scale = data.frame(scale(df_sel))
+```
+
+
+```{r}
+head(df_scale)
+```
+
+## PCA
+
+```{r}
+pc_out = prcomp(df_scale)
+summary(pc_out)
+plot(pc_out)
+
+```
+scree plot
+```{r}
+variance = pc_out$sdev^2
+pve = 100 * variance / sum(variance)
+par(mfrow = c(1, 2))
+plot(pve, xlab = "Principal Component",
+    ylab = "Variance Explained",
+    type = "b")
+plot(cumsum(pve), xlab = "Principal Component",
+    ylab = "Cumulative- Variance Explained",
+     type = "b")
+```
+
+biplot
+```{r}
+ggbiplot(pc_out, scale = 0, labels=rownames(pc_out$x))
+
+fviz_pca_var(pc_out, col.var="steelblue")
+```
+
+
+I'm able to see the 2 clusters based on the density of the data points. where the points at right side of plot are more dense and near, which differences from the other cluster.
+Though, there is not clear distinction between clusters. Clusters may be poorly defined as they are densely packed and have overlap between points. Also elliptical shape of principal component explains the variance in data points of PC1 and PC2 is due to clusters present.The further analysis helps us to clearly explain the clusters available in the data set.
+
+About PCA:
+
+PC1 explains of 24.1 % of variance and PC2 - 8.9% and total it explains around 33% of total variance. for cumulative PC14 explains variance upto 90%
+depending on the needs of percentage of the variance needed we can chose the principal component. 
+We can see features like age, education level martial status is more explained and co-related to PC2 and purchases,mntgoldprods,wines are more towards PC1
+
+### Selecting Number of Clusters
+
+```{r}
+set.seed(123)
+km_out_list <- lapply(1:10, function(k) list(
+  k=k,
+  km_out=kmeans(df_scale, k, nstart = 50)))
+
+km_results <- data.frame(
+  k=sapply(km_out_list, function(k) k$k),
+  totss=sapply(km_out_list, function(k) k$km_out$totss),
+  tot_withinss=sapply(km_out_list, function(k) k$km_out$tot.withinss)
+  )
+km_results
+ggplot(km_results,aes(x=k,y=tot_withinss))+geom_line()+geom_point()
+```
+
+```{r}
+set.seed(1)
+fviz_nbclust(df_scale, kmeans, method = "wss",k.max=10, nstart=50, iter.max=21) +
+  geom_vline(xintercept = 2, linetype = 3)+
+  labs(subtitle = "Elbow method")
+```
+
+Optimal number of clusters using elbow method will be 2,8 as shown in the graph.
+2 will be a better choice accroding to elbow method for our objective
+
+
+```{r}
+set.seed(1)
+fviz_nbclust(df_scale, kmeans, method = "gap_stat", nboot = 20,k.max=20, nstart=20, iter.max=40) +
+  labs(subtitle = "Gap statistic")
+```
+
+The choice of 2,16,20 or more will be a good choice
+2 will be a better choice according to gap statistic for our objective
+
+
+```{r}
+set.seed(1)
+results <- lapply(2:21, function(k) {
+  kmeans_cluster <- kmeans(df_scale, k, nstart=21, iter.max=21)
+  si <- silhouette(kmeans_cluster$cluster, dist = dist(df_scale))
+  data.frame(k=k,sil_width=mean(si[,'sil_width']),sil_width_min=min(si[,'sil_width']))
+})
+si_df <- bind_rows(results)
+
+ggplot(si_df, aes(x=k,y=sil_width,color="Width Avg"))+geom_point()+geom_line()+
+  geom_point(aes(y=sil_width_min,color="Width Min"))+geom_line(aes(y=sil_width_min,color="Width Min"))
+
+```
+
+```{r}
+set.seed(1)
+fviz_nbclust(df_scale, kmeans, method = "silhouette", nboot = 21,k.max=21, nstart=21, iter.max=40)+
+  labs(subtitle = "Silhouette method")
+```
+The choice of 2, 4, 7, 9, 11,13,19 and more will be a good option according Silhouette method
+optimal number of clusters using Silhouette method is 2 for our objective.
+
+
+The elbow technique, gap statistics, and silhouette are all showing that two clusters are the best fit for this data.This implies that dividing the store's consumers into two unique groups based on the data set attributes and characteristics will be better for market segmentation
+
+Though choosing 2 cluster over 1 might Over segment or unneeded complexity in market segmentation.Also, reducing segmentation into a single group may be a more practical solution but clustering by customer will help us in targeted Advertising which will improve our campaign. If we segment all in one campaign it won't help us in better understanding of customer and to create distinct marketing campaigns. The data is clustered based on customer features like purchase, age, income etc. Which will help in knowing customers better and take individual decision.
+
+## Clusters Visulalization
+
+
+```{r}
+df_scale.transformed = as.data.frame(-pc_out$x[,1:2])
+k = 2
+km_out = kmeans(df_scale.transformed, centers = k, nstart = 50)
+fviz_cluster(km_out, data = df_scale.transformed,geom = "point",)
+```
+
+I see some grouping in the biplot of PCA components PC1 and PC2 with K-Means cluster. In this two-dimensional space, data points from the same K-Means cluster tend to be closer together. While there is considerable overlap within clusters, data points of the same colour tend to cluster together, indicating that K-Means has discovered some significant categories within the data. Also, there is significant overlap, particularly between nearby clusters. This implies that, while K-Means has effectively identified clusters, there may be some resemblance or shared traits across nearby clusters, making segmentation more subtle.
+
+## Characterizing Cluster
+
+```{r}
+km1 <- kmeans(scale(df_sel),2,nstart = 50)
+df <- df_sel %>% mutate(Cluster = km1$cluster)
+df_cluster1 <- subset(df, Cluster == 1)
+df_cluster2 <- subset(df, Cluster == 2)
+```
+
+```{r}
+summary(df_cluster1)
+```
+
+```{r}
+summary(df_cluster2)
+```
+
+```{r}
+#COMPARING INCOME
+par(mfrow = c(1, 2))
+boxplot(Income ~ Cluster, data = df[df$Cluster == 1,], 
+        main = "Cluster 1", ylab = "Income")
+boxplot(Income ~ Cluster, data = df[df$Cluster == 2,], 
+        main = "Cluster 2", ylab = "Income")
+ #COMPARING AGE 
+par(mfrow = c(1, 2))
+boxplot(Age ~ Cluster, data = df[df$Cluster == 1,], 
+        main = "Cluster 1", ylab = "Age")
+boxplot(Age ~ Cluster, data = df[df$Cluster == 2,], 
+        main = "Cluster 2", ylab = "Age")
+#COMPARING MEMBERSHIP DAYS
+par(mfrow = c(1, 2))
+boxplot(MembershipDays ~ Cluster, data = df[df$Cluster == 1,], 
+        main = "Cluster 1", ylab = "MembershipDays")
+boxplot(MembershipDays ~ Cluster, data = df[df$Cluster == 2,], 
+        main = "Cluster 2", ylab = "MembershipDays")
+
+#COMPARING RECENCY
+par(mfrow = c(1, 2))
+boxplot(Recency ~ Cluster, data = df[df$Cluster == 1,], 
+        main = "Cluster 1", ylab = "Recency")
+boxplot(Recency ~ Cluster, data = df[df$Cluster == 2,], 
+        main = "Cluster 2", ylab = "Recency")
+
+#COMPARING EducationLevel
+par(mfrow = c(1, 2))
+boxplot(EducationLevel ~ Cluster, data = df[df$Cluster == 1,], 
+        main = "Cluster 1", ylab = "EducationLevel")
+boxplot(EducationLevel ~ Cluster, data = df[df$Cluster == 2,], 
+        main = "Cluster 2", ylab = "EducationLevel")
+
+#COMPARING Complain
+par(mfrow = c(1, 2))
+boxplot(Complain ~ Cluster, data = df[df$Cluster == 1,], 
+        main = "Cluster 1", ylab = "Complain")
+boxplot(Complain ~ Cluster, data = df[df$Cluster == 2,], 
+        main = "Cluster 2", ylab = "Complain")
+
+```
+
+OBSERVATIONS:
+
+Cluster 1
+
+* The proportion of children and teens in families is greater with average of 0.7213  and 0.5317.
+*The customers in this cluster purchased less recently of average 48.73
+*This cluster has a lower average income with average 37789
+*spending on various product categories is lower.
+*Customers in this cluster make less purchases online and in stores.
+* The average age is relatively low of average 43
+* The average length of membership is both relatively low of average 334 days
+*This group has additional complaints of average 0.011
+
+Cluster2:
+*The presence of children and teens in families is lower with average of 0.08091 and 0.471 
+*In this cluster, expenditure on numerous product categories is greater
+* This cluster has a greater average income with average of 70000
+*spending on various product categories is higher
+*Customers in this cluster make more purchases online and in stores of average 5.861 and 8.52.
+*The average age is considerably higher of average 47
+The average length of membership are higher of average 383 days
+*This cluster has fewer complaints 0.007261 comparetively
+
+
+
+```{r}
+x_dist <- dist(df_scale, method = "euclidean")
+hc.complete <- hclust(x_dist, method = "complete")
+hc.average <- hclust(x_dist, method = "average")
+hc.single <- hclust(x_dist, method = "single")
+
+#par(mfrow = c(1, 3))
+ggdendrogram(hc.complete, segements=TRUE, labels=TRUE, leaf_labels = TRUE, rotate=FALSE, theme_dendro = TRUE) +
+ labs(title='Complete Linkage')
+ggdendrogram(hc.average, segements=TRUE, labels=TRUE, leaf_labels = TRUE, rotate=FALSE, theme_dendro = TRUE) +
+ labs(title='Average Linkage')
+ggdendrogram(hc.single, segements=TRUE, labels=TRUE, leaf_labels = TRUE, rotate=FALSE, theme_dendro = TRUE) +
+ labs(title='Single Linkage')
+```
+
+scaling data is preferred, and I will be utilizing it. As the data as columns like Age, income, Recency, number of purchased etc which are nominal data. And we have data like martial status, education level, Kidhome, teenhome are ordinal therefore, if we did not scale there is high chance of clustering being biased on values instead of actual relation.Therefore, scaling reveals that variable scales, rather than underlying data connections, dominating the clustering process.
+
+The choice of average and complete linkage will be better option compare to single linkage as in single linkage we are not able differentiate and it is not balanced in size.Also it is more sensitive to outliers  and no clarity and no sharp jumps to classify the clusters.
+If we have to compare between average and complete linkage, for our objective average linkage will be a better choice over complete linkage as it is helping us to differentiate clearly between clusters with sharp jumps. The length of vertical lines for cluster merging is modest, reflecting a balance between compactness and separation.
+
+Choosing clusters:
+I will be choosing 2 clusters as average linkage offers a balanced solution with two primary customer segments that are moderately distinct and internally cohesive which correlates with our objective of customer segmentation and we can also confirm that by a tree-like structure with branches that merge progressively can be seen.
+
